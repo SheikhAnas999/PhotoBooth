@@ -1,0 +1,238 @@
+{
+  "78": {
+    "inputs": {
+      "image": "Gemini_Generated_Image_8wmcba8wmcba8wmc.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "342": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "434:336",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "434:336": {
+    "inputs": {
+      "samples": [
+        "434:340",
+        0
+      ],
+      "vae": [
+        "434:337",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "434:348": {
+    "inputs": {
+      "prompt": "Transform the reference person into a cinematic aerial scene. Repose and relight the subject — New pose: face turned 3/4 toward camera, natural smile, joyful expression, dynamic candid posture, playful confidence, engaged eye contact — expression and stance vary each generation.\nWearing grey or brown camouflage patterned combat uniform  Dark tactical bomber/flight jacket layered over the uniform with shoulder harness straps.\nThe person should occupy the lower-center 30% of the frame, composited naturally against a breathtaking aerial cityscape backdrop.\nLayout breakdown (strictly follow): Top 30% — Sky only: Dramatic golden-hour sunset sky, deep orange, gold clouds, no subjects here. Two F/A-18 fighter jets leave white contrail streaks flying in far sky parallel. Middle 50% — Aerial cityscape: A coastal city skyline viewed from extreme height — dense towers along a long straight beach, golden ocean reflecting the sunset on the right side, city sprawl on the left, one tall spire skyscraper visible. Bottom 20% — Subject: The reference person, naturally blended, relit with warm orange sunset rim lighting from the right. Style: Hyper-realistic photo composite, cinematic color grade, golden hour warm tones (orange, gold), sharp subject, volumetric light rays, professional retouching, 8K quality.",
+      "clip": [
+        "434:338",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "434:375": {
+    "inputs": {
+      "pixels": [
+        "434:434",
+        0
+      ],
+      "vae": [
+        "434:337",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "434:395": {
+    "inputs": {
+      "conditioning": [
+        "434:348",
+        0
+      ],
+      "latent": [
+        "434:375",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "ReferenceLatent"
+    }
+  },
+  "434:337": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "434:335": {
+    "inputs": {
+      "strength": 0.8,
+      "model": [
+        "434:339",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
+    }
+  },
+  "434:339": {
+    "inputs": {
+      "shift": 3.5,
+      "model": [
+        "434:354",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "434:347": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "434:338",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "434:338": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "434:397": {
+    "inputs": {
+      "image": [
+        "78",
+        0
+      ]
+    },
+    "class_type": "FluxKontextImageScale",
+    "_meta": {
+      "title": "FluxKontextImageScale"
+    }
+  },
+  "434:340": {
+    "inputs": {
+      "seed": 801355694237891,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "434:335",
+        0
+      ],
+      "positive": [
+        "434:395",
+        0
+      ],
+      "negative": [
+        "434:347",
+        0
+      ],
+      "latent_image": [
+        "434:375",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "434:341": {
+    "inputs": {
+      "unet_name": "qwen_image_edit_2511_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "434:354": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Lightning-4steps-V1.0.safetensors",
+      "strength_model": 1,
+      "model": [
+        "434:341",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "434:434": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "width": 1920,
+      "height": 1080,
+      "crop": "center",
+      "image": [
+        "434:397",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Upscale Image"
+    }
+  },
+  "434:435": {
+    "inputs": {
+      "images": [
+        "434:434",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  }
+}
