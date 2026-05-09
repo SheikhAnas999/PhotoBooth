@@ -1,0 +1,4 @@
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+
+I have uses above pytorch for my pc to run comfyui but we should check for cuda version in the app some how and also install the right pytorch version somehow.

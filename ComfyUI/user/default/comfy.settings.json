@@ -1,0 +1,9 @@
+{
+    "Comfy.WorkflowActions.SeenItems": [
+        "enter-builder-mode"
+    ],
+    "Comfy.Templates.SelectedRunsOn": [
+        "ComfyUI"
+    ],
+    "Comfy.RightSidePanel.IsOpen": true
+}
