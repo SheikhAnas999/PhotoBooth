@@ -5,5 +5,8 @@
     "Comfy.Templates.SelectedRunsOn": [
         "ComfyUI"
     ],
-    "Comfy.RightSidePanel.IsOpen": true
+    "Comfy.RightSidePanel.IsOpen": false,
+    "Comfy.Minimap.Visible": false,
+    "Comfy.Queue.History.Expanded": true,
+    "Comfy.Queue.QPOV2": true
 }
