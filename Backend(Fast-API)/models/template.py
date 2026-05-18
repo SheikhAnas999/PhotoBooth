@@ -44,6 +44,7 @@ class TemplateFields(BaseModel):
     textColor: str = "#ffffff"
     textPosition: Position
     logoUrl: str | None = None
+    templateImageUrl: str | None = None
     logoScale: float = Field(default=0.2, ge=0.08, le=0.45)
     logoLocked: bool = False
     logoPosition: Position
@@ -55,7 +56,7 @@ class TemplateFields(BaseModel):
 
 
 class TemplateCreate(TemplateFields):
-    pass
+    templateImageUrl: str = Field(min_length=1)
 
 
 class TemplateUpdate(BaseModel):
@@ -70,6 +71,7 @@ class TemplateUpdate(BaseModel):
     textColor: str | None = None
     textPosition: Position | None = None
     logoUrl: str | None = None
+    templateImageUrl: str | None = None
     logoScale: float | None = Field(default=None, ge=0.08, le=0.45)
     logoLocked: bool | None = None
     logoPosition: Position | None = None

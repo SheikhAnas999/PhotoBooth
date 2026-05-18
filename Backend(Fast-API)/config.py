@@ -3,6 +3,8 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = _BACKEND_ROOT.parent
+IMAGES_DIR = PROJECT_ROOT / "Images"
 
 
 class Settings(BaseSettings):

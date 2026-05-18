@@ -11,6 +11,7 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
+from config import IMAGES_DIR
 from database import close_db, connect_db, get_database
 from routes.event import router as event_router
 from routes.generate import router as generate_router
@@ -19,6 +20,7 @@ from routes.template import router as template_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     await connect_db()
     yield
     await close_db()

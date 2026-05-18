@@ -23,9 +23,18 @@ class EventResponse(BaseModel):
     eventId: str
     name: str
     templates: list[EventTemplateRef]
+    path: str
+    count: int = 0
     createdAt: datetime
 
 
 class EventListResponse(BaseModel):
     events: list[EventResponse]
     count: int
+
+
+class DeleteEventResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, ser_json_by_alias=True)
+
+    eventId: str
+    message: str

@@ -102,6 +102,7 @@ async def delete_template(template_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Template '{template_id}' not found",
         )
+
     return DeleteTemplateResponse(
         templateId=template_id,
         message="Template deleted successfully",
