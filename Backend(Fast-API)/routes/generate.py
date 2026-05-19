@@ -9,9 +9,15 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pymongo import ReturnDocument
 
+from config import COMFYUI_OUTPUT_DIR, PROJECT_ROOT
+from database import get_database
 from models.generate import GenerateResponse
+from routes.event import _find_event_or_404, _resolve_event_folder
 from routes.template import _find_template_or_404
+
+EVENTS_COLLECTION = "events"
 
 COMFYUI_URL = "http://127.0.0.1:8188"
 WORKFLOWS_DIR = Path(__file__).resolve().parent.parent / "workflows"
@@ -115,7 +121,7 @@ def combine_prompts(base_prompt: str, people_prompt: str) -> str:
         return people
     if not people:
         return base
-    return f"{base}\n{people}"
+    return f"{people}\n{base}"
 
 
 def normalize_people_prompts(people_prompts: Any) -> dict[str, str]:
@@ -365,6 +371,77 @@ async def download_comfyui_image(
     return response.content
 
 
+def _comfyui_output_file_path(image_info: dict[str, str]) -> Path | None:
+    filename = image_info.get("filename")
+    if not filename:
+        return None
+
+    if image_info.get("type", "output") != "output":
+        return None
+
+    subfolder = image_info.get("subfolder", "")
+    file_path = (COMFYUI_OUTPUT_DIR / subfolder / filename).resolve()
+    output_root = COMFYUI_OUTPUT_DIR.resolve()
+
+    try:
+        file_path.relative_to(output_root)
+    except ValueError:
+        return None
+
+    return file_path
+
+
+def delete_comfyui_output_image(
+    image_info: dict[str, str],
+    *,
+    request_id: str = "",
+) -> None:
+    prefix = f"[{request_id}] " if request_id else ""
+    file_path = _comfyui_output_file_path(image_info)
+    if file_path is None:
+        logger.warning("%sSkipping ComfyUI output delete: invalid image info %s", prefix, image_info)
+        return
+
+    if file_path.is_file():
+        file_path.unlink()
+        logger.info("%sDeleted ComfyUI output file: %s", prefix, file_path)
+    else:
+        logger.warning("%sComfyUI output file not found for delete: %s", prefix, file_path)
+
+
+def save_image_to_event_folder(
+    event_folder: Path,
+    image_bytes: bytes,
+    image_info: dict[str, str],
+    file_number: int,
+) -> Path:
+    suffix = Path(image_info.get("filename", "output.png")).suffix or ".png"
+    event_folder.mkdir(parents=True, exist_ok=True)
+    save_path = event_folder / f"{file_number}{suffix}"
+    save_path.write_bytes(image_bytes)
+    return save_path
+
+
+async def increment_event_count(event_id: str) -> int:
+    document = await get_database()[EVENTS_COLLECTION].find_one_and_update(
+        {"eventId": event_id},
+        {"$inc": {"count": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Event '{event_id}' not found")
+    return int(document.get("count", 0))
+
+
+def _event_template_ids(event: dict[str, Any]) -> set[str]:
+    templates = event.get("templates") or []
+    return {
+        item["templateId"]
+        for item in templates
+        if isinstance(item, dict) and item.get("templateId")
+    }
+
+
 async def count_people_in_image(
     client: httpx.AsyncClient,
     uploaded_filename: str,
@@ -404,7 +481,7 @@ async def run_image_edit_workflow(
     seed: Optional[int] = None,
     *,
     request_id: str = "",
-) -> tuple[str, bytes]:
+) -> tuple[str, bytes, dict[str, str]]:
     prefix = f"[{request_id}] " if request_id else ""
     logger.info(
         "%sStarting image edit workflow image=%s prompt_len=%d seed=%s",
@@ -437,13 +514,18 @@ async def run_image_edit_workflow(
     )
     image_bytes = await download_comfyui_image(client, image_info)
     logger.info("%sOutput image downloaded: %d bytes", prefix, len(image_bytes))
-    return prompt_id, image_bytes
+    return prompt_id, image_bytes, image_info
 
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate(
     image: UploadFile = File(..., description="Image to edit"),
     template_id: str = Form(..., description="Template ID for prompts"),
+    event_id: str = Form(
+        ...,
+        alias="eventId",
+        description="Event ID to save the generated image under",
+    ),
     seed: Optional[int] = Form(default=None, description="Override the KSampler seed"),
 ):
     request_id = uuid.uuid4().hex[:8]
@@ -457,8 +539,9 @@ async def generate(
     filename = image.filename or "input.png"
     content_type = image.content_type or "image/png"
     logger.info(
-        "[%s] POST /generate started template_id=%s file=%s size=%d bytes content_type=%s",
+        "[%s] POST /generate started event_id=%s template_id=%s file=%s size=%d bytes content_type=%s",
         request_id,
+        event_id,
         template_id,
         filename,
         len(image_bytes),
@@ -466,6 +549,19 @@ async def generate(
     )
 
     try:
+        event = await _find_event_or_404(event_id)
+        event_folder = _resolve_event_folder(event.get("path", ""))
+        if event_folder is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Event '{event_id}' has no valid image folder path",
+            )
+        if template_id not in _event_template_ids(event):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Template '{template_id}' is not assigned to event '{event_id}'",
+            )
+
         template = await _find_template_or_404(template_id)
         logger.info(
             "[%s] Template loaded: name=%r templateId=%s",
@@ -541,7 +637,7 @@ async def generate(
                     len(combined_prompt),
                 )
 
-            prompt_id, output_image_bytes = await run_image_edit_workflow(
+            prompt_id, output_image_bytes, output_image_info = await run_image_edit_workflow(
                 client,
                 uploaded_filename,
                 combined_prompt,
@@ -581,6 +677,17 @@ async def generate(
         logger.exception("[%s] Unexpected error during /generate", request_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    delete_comfyui_output_image(output_image_info, request_id=request_id)
+
+    new_event_count = await increment_event_count(event_id)
+    saved_path = save_image_to_event_folder(
+        event_folder,
+        output_image_bytes,
+        output_image_info,
+        new_event_count,
+    )
+    saved_image_path = saved_path.relative_to(PROJECT_ROOT).as_posix()
+
     output_image_base64 = base64.b64encode(output_image_bytes).decode("ascii")
 
     message = "Image generated successfully"
@@ -591,11 +698,14 @@ async def generate(
 
     elapsed = time.monotonic() - started
     logger.info(
-        "[%s] POST /generate completed prompt_id=%s person_count=%d output_bytes=%d total_elapsed=%.1fs",
+        "[%s] POST /generate completed prompt_id=%s person_count=%d output_bytes=%d "
+        "saved_image_path=%s event_count=%d total_elapsed=%.1fs",
         request_id,
         prompt_id,
         person_count,
         len(output_image_bytes),
+        saved_image_path,
+        new_event_count,
         elapsed,
     )
 
@@ -605,4 +715,7 @@ async def generate(
         uploaded_filename=uploaded_filename,
         output_image_base64=output_image_base64,
         message=message,
+        event_id=event_id,
+        saved_image_path=saved_image_path,
+        event_count=new_event_count,
     )

@@ -13,6 +13,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from config import IMAGES_DIR
 from database import close_db, connect_db, get_database
+from routes.email import router as email_router
 from routes.event import router as event_router
 from routes.generate import router as generate_router
 from routes.template import router as template_router
@@ -35,6 +36,7 @@ app = FastAPI(
 app.include_router(generate_router)
 app.include_router(template_router)
 app.include_router(event_router)
+app.include_router(email_router)
 
 
 @app.get("/")

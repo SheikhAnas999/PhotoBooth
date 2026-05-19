@@ -37,6 +37,16 @@ def _document_to_response(document: dict[str, Any]) -> EventResponse:
     return EventResponse.model_validate(payload)
 
 
+async def _find_event_or_404(event_id: str) -> dict[str, Any]:
+    document = await _events_collection().find_one({"eventId": event_id})
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event '{event_id}' not found",
+        )
+    return document
+
+
 def _sanitize_folder_name(name: str) -> str:
     cleaned = "".join(char for char in name.strip() if char not in _INVALID_FOLDER_CHARS)
     return cleaned.rstrip(". ") or "event"
