@@ -16,6 +16,7 @@ from database import get_database
 from models.generate import GenerateResponse
 from routes.event import _find_event_or_404, _resolve_event_folder
 from routes.template import _find_template_or_404
+from utils.event_images import notify_image_added
 
 EVENTS_COLLECTION = "events"
 
@@ -687,6 +688,13 @@ async def generate(
         new_event_count,
     )
     saved_image_path = saved_path.relative_to(PROJECT_ROOT).as_posix()
+
+    await notify_image_added(
+        event_id,
+        filename=saved_path.name,
+        saved_image_path=saved_image_path,
+        event_count=new_event_count,
+    )
 
     output_image_base64 = base64.b64encode(output_image_bytes).decode("ascii")
 
