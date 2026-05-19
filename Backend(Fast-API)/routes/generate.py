@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 import time
 import uuid
 from pathlib import Path
@@ -13,7 +14,7 @@ from pymongo import ReturnDocument
 
 from config import COMFYUI_OUTPUT_DIR, PROJECT_ROOT
 from database import get_database
-from models.generate import GenerateResponse
+from models.generate import GenerateResponse, PreviewImageResponse
 from routes.event import _find_event_or_404, _resolve_event_folder
 from routes.template import _find_template_or_404
 from utils.event_images import notify_image_added
@@ -27,9 +28,10 @@ DETECT_WORKFLOW_PATH = WORKFLOWS_DIR / "detect-person-in-image.json"
 
 DETECT_IMAGE_NODE_ID = "692"
 DETECT_TEXT_NODE_ID = "695"
-EDIT_IMAGE_NODE_ID = "78"
+EDIT_IMAGE_NODE_ID = "343"
 EDIT_PROMPT_NODE_ID = "434:348"
 EDIT_OUTPUT_NODE_ID = "342"
+EDIT_SEED_NODE_ID = "344:434:340"
 
 MAX_PEOPLE = 5
 JOB_POLL_INTERVAL_SEC = 1.0
@@ -38,6 +40,11 @@ EDIT_JOB_TIMEOUT_SEC = 600.0
 
 router = APIRouter(tags=["generate"])
 logger = logging.getLogger(__name__)
+
+_TEMPLATE_ID_UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 
 def load_workflow(path: Path) -> dict:
@@ -74,7 +81,7 @@ def build_edit_payload(
     workflow[EDIT_PROMPT_NODE_ID]["inputs"]["prompt"] = prompt
 
     if seed is not None:
-        workflow["434:340"]["inputs"]["seed"] = seed
+        workflow[EDIT_SEED_NODE_ID]["inputs"]["seed"] = seed
 
     return {
         "prompt": workflow,
@@ -434,6 +441,27 @@ async def increment_event_count(event_id: str) -> int:
     return int(document.get("count", 0))
 
 
+def _validate_template_id_form_value(template_id: str) -> str:
+    value = template_id.strip()
+    if len(value) > 80 or " " in value:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "template_id must be a template UUID from GET /get-templates or the event "
+                "templates list — not the prompt text. For a custom prompt, use POST /preview-image."
+            ),
+        )
+    if not _TEMPLATE_ID_UUID.match(value):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "template_id must be a UUID like bbd81d6b-5b71-4b8a-a905-57ce323935fd. "
+                "Find it via GET /show-events (templates[].templateId) or GET /get-templates."
+            ),
+        )
+    return value
+
+
 def _event_template_ids(event: dict[str, Any]) -> set[str]:
     templates = event.get("templates") or []
     return {
@@ -521,7 +549,10 @@ async def run_image_edit_workflow(
 @router.post("/generate", response_model=GenerateResponse)
 async def generate(
     image: UploadFile = File(..., description="Image to edit"),
-    template_id: str = Form(..., description="Template ID for prompts"),
+    template_id: str = Form(
+        ...,
+        description="Template UUID (e.g. bbd81d6b-5b71-4b8a-a905-57ce323935fd). Not the prompt text.",
+    ),
     event_id: str = Form(
         ...,
         alias="eventId",
@@ -536,6 +567,8 @@ async def generate(
     if not image_bytes:
         logger.warning("[%s] Rejected empty image upload", request_id)
         raise HTTPException(status_code=400, detail="Uploaded image is empty")
+
+    template_id = _validate_template_id_form_value(template_id)
 
     filename = image.filename or "input.png"
     content_type = image.content_type or "image/png"
@@ -726,4 +759,81 @@ async def generate(
         event_id=event_id,
         saved_image_path=saved_image_path,
         event_count=new_event_count,
+    )
+
+
+@router.post("/preview-image", response_model=PreviewImageResponse)
+async def preview_image(
+    image: UploadFile = File(..., description="Reference image to edit"),
+    prompt: str = Form(..., description="Edit prompt for the Qwen image workflow"),
+    seed: Optional[int] = Form(default=None, description="Override the KSampler seed"),
+):
+    request_id = uuid.uuid4().hex[:8]
+    started = time.monotonic()
+
+    if not prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded image is empty")
+
+    filename = image.filename or "preview-input.png"
+    content_type = image.content_type or "image/png"
+    logger.info(
+        "[%s] POST /preview-image started file=%s prompt_len=%d",
+        request_id,
+        filename,
+        len(prompt.strip()),
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=EDIT_JOB_TIMEOUT_SEC)) as client:
+            uploaded_filename = await upload_image_bytes_to_comfyui(
+                client,
+                filename,
+                image_bytes,
+                content_type,
+            )
+            prompt_id, output_image_bytes, output_image_info = await run_image_edit_workflow(
+                client,
+                uploaded_filename,
+                prompt.strip(),
+                seed,
+                request_id=request_id,
+            )
+    except HTTPException:
+        raise
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Cannot connect to ComfyUI. Make sure it is running on port 8188.",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"ComfyUI returned an error: {exc.response.text}",
+        ) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("[%s] Unexpected error during /preview-image", request_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    delete_comfyui_output_image(output_image_info, request_id=request_id)
+    output_image_base64 = base64.b64encode(output_image_bytes).decode("ascii")
+
+    elapsed = time.monotonic() - started
+    logger.info(
+        "[%s] POST /preview-image completed prompt_id=%s output_bytes=%d elapsed=%.1fs",
+        request_id,
+        prompt_id,
+        len(output_image_bytes),
+        elapsed,
+    )
+
+    return PreviewImageResponse(
+        prompt_id=prompt_id,
+        output_image_base64=output_image_base64,
+        message="Preview image generated successfully",
     )

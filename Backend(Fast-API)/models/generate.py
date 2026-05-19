@@ -10,3 +10,9 @@ class GenerateResponse(BaseModel):
     event_id: str
     saved_image_path: str
     event_count: int
+
+
+class PreviewImageResponse(BaseModel):
+    prompt_id: str
+    output_image_base64: str
+    message: str

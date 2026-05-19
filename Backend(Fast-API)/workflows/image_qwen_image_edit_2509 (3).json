@@ -1,18 +1,9 @@
 {
-  "78": {
-    "inputs": {
-      "image": "Gemini_Generated_Image_8wmcba8wmcba8wmc.png"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "Load Image"
-    }
-  },
   "342": {
     "inputs": {
       "filename_prefix": "ComfyUI",
       "images": [
-        "434:336",
+        "344:434:336",
         0
       ]
     },
@@ -21,43 +12,23 @@
       "title": "Save Image"
     }
   },
-  "434:336": {
+  "343": {
     "inputs": {
-      "samples": [
-        "434:340",
-        0
-      ],
-      "vae": [
-        "434:337",
-        0
-      ]
+      "image": "capture.jpg"
     },
-    "class_type": "VAEDecode",
+    "class_type": "LoadImage",
     "_meta": {
-      "title": "VAE Decode"
+      "title": "Load Image"
     }
   },
-  "434:348": {
-    "inputs": {
-      "prompt": "Transform the reference person into a cinematic aerial scene. Repose and relight the subject — New pose: face turned 3/4 toward camera, natural smile, joyful expression, dynamic candid posture, playful confidence, engaged eye contact — expression and stance vary each generation.\nWearing grey or brown camouflage patterned combat uniform  Dark tactical bomber/flight jacket layered over the uniform with shoulder harness straps.\nThe person should occupy the lower-center 30% of the frame, composited naturally against a breathtaking aerial cityscape backdrop.\nLayout breakdown (strictly follow): Top 30% — Sky only: Dramatic golden-hour sunset sky, deep orange, gold clouds, no subjects here. Two F/A-18 fighter jets leave white contrail streaks flying in far sky parallel. Middle 50% — Aerial cityscape: A coastal city skyline viewed from extreme height — dense towers along a long straight beach, golden ocean reflecting the sunset on the right side, city sprawl on the left, one tall spire skyscraper visible. Bottom 20% — Subject: The reference person, naturally blended, relit with warm orange sunset rim lighting from the right. Style: Hyper-realistic photo composite, cinematic color grade, golden hour warm tones (orange, gold), sharp subject, volumetric light rays, professional retouching, 8K quality.",
-      "clip": [
-        "434:338",
-        0
-      ]
-    },
-    "class_type": "TextEncodeQwenImageEditPlus",
-    "_meta": {
-      "title": "TextEncodeQwenImageEditPlus"
-    }
-  },
-  "434:375": {
+  "344:434:375": {
     "inputs": {
       "pixels": [
-        "434:434",
+        "344:434:434",
         0
       ],
       "vae": [
-        "434:337",
+        "344:434:337",
         0
       ]
     },
@@ -66,14 +37,14 @@
       "title": "VAE Encode"
     }
   },
-  "434:395": {
+  "344:434:395": {
     "inputs": {
       "conditioning": [
         "434:348",
         0
       ],
       "latent": [
-        "434:375",
+        "344:434:375",
         0
       ]
     },
@@ -82,20 +53,11 @@
       "title": "ReferenceLatent"
     }
   },
-  "434:337": {
-    "inputs": {
-      "vae_name": "qwen_image_vae.safetensors"
-    },
-    "class_type": "VAELoader",
-    "_meta": {
-      "title": "Load VAE"
-    }
-  },
-  "434:335": {
+  "344:434:335": {
     "inputs": {
       "strength": 0.8,
       "model": [
-        "434:339",
+        "344:434:339",
         0
       ]
     },
@@ -104,11 +66,11 @@
       "title": "CFGNorm"
     }
   },
-  "434:339": {
+  "344:434:339": {
     "inputs": {
       "shift": 3.5,
       "model": [
-        "434:354",
+        "344:434:354",
         0
       ]
     },
@@ -117,20 +79,72 @@
       "title": "ModelSamplingAuraFlow"
     }
   },
-  "434:347": {
+  "344:434:397": {
     "inputs": {
-      "prompt": "",
-      "clip": [
-        "434:338",
+      "image": [
+        "343",
         0
       ]
     },
-    "class_type": "TextEncodeQwenImageEditPlus",
+    "class_type": "FluxKontextImageScale",
     "_meta": {
-      "title": "TextEncodeQwenImageEditPlus"
+      "title": "FluxKontextImageScale"
     }
   },
-  "434:338": {
+  "344:434:354": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Lightning-4steps-V1.0.safetensors",
+      "strength_model": 1,
+      "model": [
+        "344:434:341",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "344:434:340": {
+    "inputs": {
+      "seed": 54843062880305,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "344:434:335",
+        0
+      ],
+      "positive": [
+        "344:434:395",
+        0
+      ],
+      "negative": [
+        "344:434:347",
+        0
+      ],
+      "latent_image": [
+        "344:434:375",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "344:434:337": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "344:434:338": {
     "inputs": {
       "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
       "type": "qwen_image",
@@ -141,49 +155,7 @@
       "title": "Load CLIP"
     }
   },
-  "434:397": {
-    "inputs": {
-      "image": [
-        "78",
-        0
-      ]
-    },
-    "class_type": "FluxKontextImageScale",
-    "_meta": {
-      "title": "FluxKontextImageScale"
-    }
-  },
-  "434:340": {
-    "inputs": {
-      "seed": 801355694237891,
-      "steps": 4,
-      "cfg": 1,
-      "sampler_name": "dpmpp_2m",
-      "scheduler": "simple",
-      "denoise": 1,
-      "model": [
-        "434:335",
-        0
-      ],
-      "positive": [
-        "434:395",
-        0
-      ],
-      "negative": [
-        "434:347",
-        0
-      ],
-      "latent_image": [
-        "434:375",
-        0
-      ]
-    },
-    "class_type": "KSampler",
-    "_meta": {
-      "title": "KSampler"
-    }
-  },
-  "434:341": {
+  "344:434:341": {
     "inputs": {
       "unet_name": "qwen_image_edit_2511_fp8_e4m3fn.safetensors",
       "weight_dtype": "default"
@@ -193,28 +165,55 @@
       "title": "Load Diffusion Model"
     }
   },
-  "434:354": {
+  "344:434:336": {
     "inputs": {
-      "lora_name": "Qwen-Image-Lightning-4steps-V1.0.safetensors",
-      "strength_model": 1,
-      "model": [
-        "434:341",
+      "samples": [
+        "344:434:340",
+        0
+      ],
+      "vae": [
+        "344:434:337",
         0
       ]
     },
-    "class_type": "LoraLoaderModelOnly",
+    "class_type": "VAEDecode",
     "_meta": {
-      "title": "LoraLoaderModelOnly"
+      "title": "VAE Decode"
     }
   },
-  "434:434": {
+  "344:345": {
+    "inputs": {
+      "images": [
+        "344:434:434",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "344:434:347": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "344:434:338",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "344:434:434": {
     "inputs": {
       "upscale_method": "lanczos",
-      "width": 1920,
-      "height": 1080,
+      "width": 1080,
+      "height": 1320,
       "crop": "center",
       "image": [
-        "434:397",
+        "344:434:397",
         0
       ]
     },
@@ -223,16 +222,17 @@
       "title": "Upscale Image"
     }
   },
-  "434:435": {
+  "434:348": {
     "inputs": {
-      "images": [
-        "434:434",
+      "prompt": "Use the reference image as the only identity source. Preserve the exact person with maximum facial fidelity: same face structure, jawline, cheekbones, eyes, eyelids, eyebrows, nose shape, lips, skin tone, hair color, hair texture, hairline, age appearance, body proportions, and overall identity. Do not change gender.\nPreserve the exact clothing, tactical uniform, armored vest, gloves, and patches. Keep the same black helicopter presence and relative placement, with rotor blades spinning.\nChange only the environment and background: subject appears at ground level on promenade with the Gold Coast skyline and coastline clearly visible behind them. Helicopter is landing in the mid-background. Skyline must look crisp and recognizable, ocean coastline stretching beside the city.\nSky: Dramatic warm golden-hour sunset sky with sweeping, voluminous clouds rendered in deep amber, burnished gold, and soft cream tones — cinematic and painterly, with the sun low on the horizon casting long warm rays through cloud breaks. Sky mood matches a grand, theatrical late-afternoon atmosphere, neither flat nor overcast.\nBlur effect: Apply a cinematic long-exposure motion blur to all peripheral and background elements — any distant crowd silhouettes, airshow spectators, barriers, the subject and helicopter remain in sharp, crisp focus. This contrast of frozen subject against fluid, blurred surroundings creates a sense of dynamic energy and scale.\nSubtle airshow atmosphere in the far distance. Energy is aspirational, immersive, luxury lifestyle meets aviation. Cinematic but polished and premium. Ultra realistic skin texture, realistic fabric detail, natural anatomy, sharp focus on subject, high detail background.",
+      "clip": [
+        "344:434:338",
         0
       ]
     },
-    "class_type": "PreviewImage",
+    "class_type": "TextEncodeQwenImageEditPlus",
     "_meta": {
-      "title": "Preview Image"
+      "title": "TextEncodeQwenImageEditPlus"
     }
   }
 }
