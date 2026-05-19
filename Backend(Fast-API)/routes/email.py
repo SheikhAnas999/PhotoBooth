@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Response, status
+from fastapi.responses import FileResponse
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
 from pymongo import ReturnDocument
 
@@ -13,6 +14,11 @@ from models.email import (
     SendEmailRequest,
     SendEmailResponse,
     ShowConnectGmailResponse,
+)
+from utils.event_zip import (
+    create_event_zip_archive,
+    get_event_image_folder,
+    zip_download_filename,
 )
 
 router = APIRouter(tags=["email"])
@@ -68,6 +74,10 @@ def _connection_config(sender_gmail: str, sender_app_password: str) -> Connectio
     )
 
 
+def _remove_file(path: Path) -> None:
+    path.unlink(missing_ok=True)
+
+
 @router.post("/connect-gmail", response_model=ConnectGmailResponse)
 async def connect_gmail(body: ConnectGmailRequest, response: Response):
     sender_gmail = str(body.sender_gmail).lower()
@@ -110,8 +120,28 @@ async def show_connect_gmail():
     )
 
 
+@router.get("/zip/{event_id}")
+async def download_event_zip(event_id: str, background_tasks: BackgroundTasks):
+    event_folder, event_name = await get_event_image_folder(event_id)
+    zip_path = create_event_zip_archive(event_id, event_folder)
+    filename = zip_download_filename(event_name)
+
+    background_tasks.add_task(_remove_file, zip_path)
+
+    return FileResponse(
+        path=zip_path,
+        media_type="application/zip",
+        filename=filename,
+    )
+
+
 @router.post("/send-email", response_model=SendEmailResponse)
 async def send_email(body: SendEmailRequest):
+    event_folder, event_name = await get_event_image_folder(body.event_id)
+    image_count = sum(1 for path in event_folder.iterdir() if path.is_file())
+    zip_path = create_event_zip_archive(body.event_id, event_folder)
+    zip_filename = zip_download_filename(event_name)
+
     sender_gmail, sender_app_password = await _get_connected_gmail_credentials()
     conf = _connection_config(sender_gmail, sender_app_password)
 
@@ -120,6 +150,7 @@ async def send_email(body: SendEmailRequest):
         recipients=[str(body.receiver_email)],
         body=body.message,
         subtype="plain",
+        attachments=[str(zip_path)],
     )
 
     try:
@@ -130,5 +161,11 @@ async def send_email(body: SendEmailRequest):
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to send email: {exc}",
         ) from exc
+    finally:
+        _remove_file(zip_path)
 
-    return SendEmailResponse(message="Email sent successfully")
+    return SendEmailResponse(
+        message="Email sent successfully",
+        zip_filename=zip_filename,
+        image_count=image_count,
+    )

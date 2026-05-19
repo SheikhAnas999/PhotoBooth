@@ -26,10 +26,19 @@ class ShowConnectGmailResponse(BaseModel):
 
 
 class SendEmailRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     receiver_email: EmailStr = Field(description="Recipient email address")
     message: str = Field(min_length=1, description="Plain-text email body")
+    event_id: str = Field(
+        min_length=1,
+        alias="eventId",
+        description="Event ID whose image folder will be zipped and attached",
+    )
 
 
 class SendEmailResponse(BaseModel):
     message: str
+    zip_filename: str
+    image_count: int
   
