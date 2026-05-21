@@ -8,9 +8,12 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+import cv2
 import httpx
+import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pymongo import ReturnDocument
+from ultralytics import YOLO
 
 from config import COMFYUI_OUTPUT_DIR, PROJECT_ROOT
 from database import get_database
@@ -24,10 +27,7 @@ EVENTS_COLLECTION = "events"
 COMFYUI_URL = "http://127.0.0.1:8188"
 WORKFLOWS_DIR = Path(__file__).resolve().parent.parent / "workflows"
 EDIT_WORKFLOW_PATH = WORKFLOWS_DIR / "image_qwen_image_edit_2509 (3).json"
-DETECT_WORKFLOW_PATH = WORKFLOWS_DIR / "detect-person-in-image.json"
 
-DETECT_IMAGE_NODE_ID = "692"
-DETECT_TEXT_NODE_ID = "695"
 EDIT_IMAGE_NODE_ID = "343"
 EDIT_PROMPT_NODE_ID = "434:348"
 EDIT_OUTPUT_NODE_ID = "342"
@@ -35,11 +35,25 @@ EDIT_SEED_NODE_ID = "344:434:340"
 
 MAX_PEOPLE = 5
 JOB_POLL_INTERVAL_SEC = 1.0
-DETECT_JOB_TIMEOUT_SEC = 120.0
 EDIT_JOB_TIMEOUT_SEC = 600.0
+
+YOLO_MODEL_PATH = "yolo11x.pt"
+YOLO_CONF = 0.8
+YOLO_IMGSZ = 640
+
+_yolo_model: Optional[YOLO] = None
 
 router = APIRouter(tags=["generate"])
 logger = logging.getLogger(__name__)
+
+
+def _get_yolo_model() -> YOLO:
+    global _yolo_model
+    if _yolo_model is None:
+        logger.info("Loading YOLO model from %s", YOLO_MODEL_PATH)
+        _yolo_model = YOLO(YOLO_MODEL_PATH)
+    return _yolo_model
+
 
 _TEMPLATE_ID_UUID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -58,19 +72,6 @@ def load_edit_workflow() -> dict:
     return load_workflow(EDIT_WORKFLOW_PATH)
 
 
-def load_detect_workflow() -> dict:
-    return load_workflow(DETECT_WORKFLOW_PATH)
-
-
-def build_detect_payload(image_name: str) -> dict:
-    workflow = load_detect_workflow()
-    workflow[DETECT_IMAGE_NODE_ID]["inputs"]["image"] = image_name
-    return {
-        "prompt": workflow,
-        "client_id": str(uuid.uuid4()),
-    }
-
-
 def build_edit_payload(
     image_name: str,
     prompt: str,
@@ -87,39 +88,6 @@ def build_edit_payload(
         "prompt": workflow,
         "client_id": str(uuid.uuid4()),
     }
-
-
-def parse_person_count(detection_text: str) -> int:
-    """Parse RT-DETR PreviewAny output and return the number of detected people."""
-    text = detection_text.strip()
-    if not text:
-        return 0
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("[")
-        end = text.rfind("]")
-        if start == -1 or end == -1 or end <= start:
-            raise ValueError("Detection output is not valid JSON")
-        data = json.loads(text[start : end + 1])
-
-    def count_people(value: Any) -> int:
-        if isinstance(value, list):
-            if value and all(isinstance(item, dict) for item in value):
-                return sum(
-                    1
-                    for item in value
-                    if item.get("label") == "person"
-                )
-            return sum(count_people(item) for item in value)
-        if isinstance(value, dict):
-            if "label" in value:
-                return 1 if value.get("label") == "person" else 0
-            return sum(count_people(item) for item in value.values())
-        return 0
-
-    return count_people(data)
 
 
 def combine_prompts(base_prompt: str, people_prompt: str) -> str:
@@ -472,33 +440,30 @@ def _event_template_ids(event: dict[str, Any]) -> set[str]:
 
 
 async def count_people_in_image(
-    client: httpx.AsyncClient,
-    uploaded_filename: str,
+    image_bytes: bytes,
     *,
     request_id: str = "",
 ) -> int:
     prefix = f"[{request_id}] " if request_id else ""
-    logger.info("%sStarting person detection for image=%s", prefix, uploaded_filename)
+    logger.info("%sStarting YOLO person detection", prefix)
 
-    payload = build_detect_payload(uploaded_filename)
-    prompt_id = await queue_comfyui_prompt(
-        client,
-        payload,
-        label="person-detection",
-        request_id=request_id,
-    )
-    history_entry = await wait_for_prompt_completion(
-        client,
-        prompt_id,
-        DETECT_JOB_TIMEOUT_SEC,
-        label="person-detection",
-        request_id=request_id,
-    )
-    detection_text = extract_text_output(history_entry, DETECT_TEXT_NODE_ID)
-    preview = detection_text[:200] + "..." if len(detection_text) > 200 else detection_text
-    logger.debug("%sDetection raw output: %s", prefix, preview)
+    def _detect() -> int:
+        img_array = np.frombuffer(image_bytes, dtype=np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError("Failed to decode image bytes for YOLO detection")
+        model = _get_yolo_model()
+        results = model.predict(
+            source=img,
+            classes=[0],
+            conf=YOLO_CONF,
+            imgsz=YOLO_IMGSZ,
+            save=False,
+            verbose=False,
+        )
+        return len(results[0].boxes)
 
-    person_count = parse_person_count(detection_text)
+    person_count = await asyncio.to_thread(_detect)
     logger.info("%sPerson detection complete: count=%d", prefix, person_count)
     return person_count
 
@@ -620,6 +585,37 @@ async def generate(
         ) from exc
 
     try:
+        person_count = await count_people_in_image(image_bytes, request_id=request_id)
+        if person_count < 1:
+            logger.warning("[%s] No people detected in image", request_id)
+            raise HTTPException(
+                status_code=400,
+                detail="No people detected in the uploaded image",
+            )
+
+        base_prompt, people_prompts = get_template_prompts(template)
+        prompt_key = str(prompt_count_for_detected(person_count))
+        people_prompt = get_people_prompt_for_count(people_prompts, person_count)
+        combined_prompt = combine_prompts(base_prompt, people_prompt)
+
+        if person_count > MAX_PEOPLE:
+            logger.info(
+                "[%s] Using capped people prompt: detected=%d prompt_key=%s",
+                request_id,
+                person_count,
+                prompt_key,
+            )
+        else:
+            logger.info(
+                "[%s] Prompts resolved: detected=%d prompt_key=%s base_len=%d people_len=%d combined_len=%d",
+                request_id,
+                person_count,
+                prompt_key,
+                len(base_prompt),
+                len(people_prompt),
+                len(combined_prompt),
+            )
+
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=EDIT_JOB_TIMEOUT_SEC)) as client:
             uploaded_filename = await upload_image_bytes_to_comfyui(
                 client,
@@ -632,44 +628,6 @@ async def generate(
                 request_id,
                 uploaded_filename,
             )
-
-            person_count = await count_people_in_image(
-                client,
-                uploaded_filename,
-                request_id=request_id,
-            )
-            if person_count < 1:
-                logger.warning("[%s] No people detected in image", request_id)
-                raise HTTPException(
-                    status_code=400,
-                    detail="No people detected in the uploaded image",
-                )
-
-            base_prompt, people_prompts = get_template_prompts(template)
-            prompt_key = str(prompt_count_for_detected(person_count))
-            people_prompt = get_people_prompt_for_count(
-                people_prompts,
-                person_count,
-            )
-            combined_prompt = combine_prompts(base_prompt, people_prompt)
-
-            if person_count > MAX_PEOPLE:
-                logger.info(
-                    "[%s] Using capped people prompt: detected=%d prompt_key=%s",
-                    request_id,
-                    person_count,
-                    prompt_key,
-                )
-            else:
-                logger.info(
-                    "[%s] Prompts resolved: detected=%d prompt_key=%s base_len=%d people_len=%d combined_len=%d",
-                    request_id,
-                    person_count,
-                    prompt_key,
-                    len(base_prompt),
-                    len(people_prompt),
-                    len(combined_prompt),
-                )
 
             prompt_id, output_image_bytes, output_image_info = await run_image_edit_workflow(
                 client,
