@@ -1,87 +1,32 @@
 
---extra-index-url https://download.pytorch.org/whl/cu124
+# ──────────────────────────────────────────────
+#  FastAPI Backend – direct dependencies only
+# ──────────────────────────────────────────────
 
-# --- PyTorch (CUDA 12.4) --- already installed, kept for pip to verify ---
-torch==2.5.1+cu124
-torchvision==0.20.1+cu124
-torchaudio==2.5.1+cu124
-
-# --- ComfyUI Core ---
-comfyui-frontend-package==1.43.18
-comfyui-workflow-templates==0.9.72
-comfyui-embedded-docs==0.4.4
-comfy-kitchen>=0.2.8
-comfy-aimdo==0.3.0
-
-# --- ML / Diffusion Stack ---
-torchsde
-einops
-transformers>=4.50.3
-tokenizers>=0.13.3
-sentencepiece
-safetensors>=0.4.2
-diffusers
-timm
-kornia>=0.7.1
-spandrel
-
-# --- Computer Vision ---
-opencv-python>=4.7.0
-albumentations
-ultralytics
-mmengine
-# mmcv: pre-built wheel — no source compile, no special index URL conflict
-https://archive1.piwheels.org/simple/mmcv/mmcv-2.1.0-py2.py3-none-any.whl#sha256=3b4e4836676290d1f15f0a36b770572e0463024e269c451e48a3686c63c211fb
-mmdet
-groundingdino-py>=0.4.0
-
-# --- Numerical / Scientific ---
-numpy>=1.25.0
-scipy
-pandas
-matplotlib>=3.9.1
-munkres
-blake3
-
-# --- Image / Audio / Video ---
-Pillow>=9.4.0
-av>=14.2.0
-
-# --- Config / Utilities ---
-pyyaml
-tqdm>=4.66.1
-psutil
-filelock
-requests
-simpleeval>=1.0.0
-addict
-yapf
-hydra-core>=1.3.2
-omegaconf
-
-# --- Database / Migrations ---
-alembic
-SQLAlchemy>=2.0.0
-
-# --- Backend (FastAPI) ---
+# --- Server ---
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
+
+# --- Database (MongoDB) ---
 motor>=3.6.0
 pymongo>=4.10.0
-httpx>=0.27.0
-python-multipart>=0.0.9
+
+# --- Email ---
 fastapi-mail>=1.4.1
 aiohttp>=3.11.8
 yarl>=1.18.0
 
+# --- HTTP Client (ComfyUI bridge) ---
+httpx>=0.27.0
+
+# --- File Uploads (FastAPI File / Form) ---
+python-multipart>=0.0.9
+
 # --- Pydantic ---
-pydantic~=2.0
+pydantic[email]~=2.0
 pydantic-settings~=2.0
 
-# --- OpenGL / Display ---
-PyOpenGL
-glfw
-
-# --- iopath ---
-iopath>=0.1.10
-pydantic[email]
+# --- Computer Vision / YOLO ---
+opencv-python>=4.7.0
+numpy>=1.25.0
+ultralytics

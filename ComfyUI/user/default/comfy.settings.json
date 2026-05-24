@@ -8,5 +8,7 @@
     "Comfy.RightSidePanel.IsOpen": false,
     "Comfy.Minimap.Visible": false,
     "Comfy.Queue.History.Expanded": true,
-    "Comfy.Queue.QPOV2": true
+    "Comfy.Queue.QPOV2": true,
+    "Comfy.InstalledVersion": "1.43.18",
+    "Comfy.TutorialCompleted": true
 }
