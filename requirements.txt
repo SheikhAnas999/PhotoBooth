@@ -30,3 +30,6 @@ pydantic-settings~=2.0
 opencv-python>=4.7.0
 numpy>=1.25.0
 ultralytics
+
+# --- Image Hosting ---
+cloudinary>=1.44.0
