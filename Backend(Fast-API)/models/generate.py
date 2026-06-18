@@ -10,6 +10,7 @@ class GenerateResponse(BaseModel):
     event_id: str
     saved_image_path: str
     event_count: int
+    cloudinary_url: str
 
 
 class PreviewImageResponse(BaseModel):

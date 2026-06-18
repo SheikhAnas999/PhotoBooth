@@ -2,12 +2,15 @@ import asyncio
 import base64
 import json
 import logging
+import random
 import re
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+import cloudinary
+import cloudinary.uploader
 import cv2
 import httpx
 import numpy as np
@@ -15,12 +18,19 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pymongo import ReturnDocument
 from ultralytics import YOLO
 
-from config import COMFYUI_OUTPUT_DIR, PROJECT_ROOT
+from config import COMFYUI_OUTPUT_DIR, PROJECT_ROOT, settings
 from database import get_database
 from models.generate import GenerateResponse, PreviewImageResponse
 from routes.event import _find_event_or_404, _resolve_event_folder
 from routes.template import _find_template_or_404
 from utils.event_images import notify_image_added
+
+cloudinary.config(
+    cloud_name=settings.cloudinary_cloud_name,
+    api_key=settings.cloudinary_api_key,
+    api_secret=settings.cloudinary_api_secret,
+    secure=True,
+)
 
 EVENTS_COLLECTION = "events"
 
@@ -88,6 +98,21 @@ def build_edit_payload(
         "prompt": workflow,
         "client_id": str(uuid.uuid4()),
     }
+
+
+def substitute_scene_vars(prompt: str, template: dict[str, Any]) -> str:
+    """Replace {pose}, {expression}, {size}, {placement} with a random value from the template lists."""
+    placeholders = {
+        "{pose}": template.get("poses") or [],
+        "{expression}": template.get("expressions") or [],
+        "{size}": template.get("sizes") or [],
+        "{placement}": template.get("placements") or [],
+    }
+    result = prompt
+    for placeholder, options in placeholders.items():
+        if placeholder in result and options:
+            result = result.replace(placeholder, random.choice(options))
+    return result
 
 
 def combine_prompts(base_prompt: str, people_prompt: str) -> str:
@@ -385,6 +410,38 @@ def delete_comfyui_output_image(
         logger.warning("%sComfyUI output file not found for delete: %s", prefix, file_path)
 
 
+async def upload_to_cloudinary(
+    image_bytes: bytes,
+    event_id: str,
+    count: int,
+    *,
+    request_id: str = "",
+) -> str:
+    prefix = f"[{request_id}] " if request_id else ""
+    public_id = f"photobooth/{event_id}/{count}"
+    logger.info("%sUploading image to Cloudinary public_id=%s", prefix, public_id)
+
+    def _upload() -> dict:
+        return cloudinary.uploader.upload(
+            image_bytes,
+            resource_type="image",
+            public_id=public_id,
+            overwrite=True,
+        )
+
+    try:
+        result = await asyncio.to_thread(_upload)
+    except Exception as exc:
+        logger.error("%sCloudinary upload failed: %s", prefix, exc)
+        raise HTTPException(status_code=502, detail=f"Cloudinary upload failed: {exc}") from exc
+
+    secure_url: str = result["secure_url"]
+    # Insert fl_attachment transform so the phone browser downloads instead of previewing
+    download_url = secure_url.replace("/upload/", "/upload/fl_attachment/", 1)
+    logger.info("%sCloudinary upload complete download_url=%s", prefix, download_url)
+    return download_url
+
+
 def save_image_to_event_folder(
     event_folder: Path,
     image_bytes: bytes,
@@ -597,6 +654,7 @@ async def generate(
         prompt_key = str(prompt_count_for_detected(person_count))
         people_prompt = get_people_prompt_for_count(people_prompts, person_count)
         combined_prompt = combine_prompts(base_prompt, people_prompt)
+        combined_prompt = substitute_scene_vars(combined_prompt, template)
 
         if person_count > MAX_PEOPLE:
             logger.info(
@@ -680,6 +738,13 @@ async def generate(
     )
     saved_image_path = saved_path.relative_to(PROJECT_ROOT).as_posix()
 
+    cloudinary_url = await upload_to_cloudinary(
+        output_image_bytes,
+        event_id=event_id,
+        count=new_event_count,
+        request_id=request_id,
+    )
+
     await notify_image_added(
         event_id,
         filename=saved_path.name,
@@ -717,6 +782,7 @@ async def generate(
         event_id=event_id,
         saved_image_path=saved_image_path,
         event_count=new_event_count,
+        cloudinary_url=cloudinary_url,
     )
 
 

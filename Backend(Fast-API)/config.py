@@ -20,5 +20,9 @@ class Settings(BaseSettings):
     mongodb_uri: str
     mongodb_db_name: str = "PhotoBooth"
 
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+
 
 settings = Settings()

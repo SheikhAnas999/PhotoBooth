@@ -10,5 +10,6 @@
     "Comfy.Queue.History.Expanded": true,
     "Comfy.Queue.QPOV2": true,
     "Comfy.InstalledVersion": "1.43.18",
-    "Comfy.TutorialCompleted": true
+    "Comfy.TutorialCompleted": true,
+    "Comfy.Templates.SortBy": "default"
 }

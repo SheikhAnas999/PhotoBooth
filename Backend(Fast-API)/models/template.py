@@ -36,8 +36,12 @@ class TemplateFields(BaseModel):
     model_config = ConfigDict(populate_by_name=True, ser_json_by_alias=True)
 
     name: str = Field(min_length=1)
-    basePrompt: str
+    basePrompt: str = ""
     peoplePrompts: PeoplePrompts
+    poses: list[str] = Field(default_factory=list)
+    expressions: list[str] = Field(default_factory=list)
+    sizes: list[str] = Field(default_factory=list)
+    placements: list[str] = Field(default_factory=list)
     overlayText: str = ""
     fontFamily: str = "Arial"
     fontSize: int = Field(default=32, ge=12, le=96)
@@ -65,6 +69,10 @@ class TemplateUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     basePrompt: str | None = None
     peoplePrompts: PeoplePrompts | None = None
+    poses: list[str] | None = None
+    expressions: list[str] | None = None
+    sizes: list[str] | None = None
+    placements: list[str] | None = None
     overlayText: str | None = None
     fontFamily: str | None = None
     fontSize: int | None = Field(default=None, ge=12, le=96)
