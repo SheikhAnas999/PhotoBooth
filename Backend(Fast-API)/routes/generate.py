@@ -174,13 +174,7 @@ def get_people_prompt_for_count(people_prompts: dict[str, str], person_count: in
 
 
 def get_template_prompts(template: dict[str, Any]) -> tuple[str, dict[str, str]]:
-    base_prompt = template.get("basePrompt") or template.get("base_prompt")
-    if not base_prompt:
-        raise HTTPException(
-            status_code=500,
-            detail="Template is missing basePrompt",
-        )
-
+    base_prompt = template.get("basePrompt") or template.get("base_prompt") or ""
     people_prompts = normalize_people_prompts(template.get("peoplePrompts"))
     return str(base_prompt), people_prompts
 
