@@ -398,8 +398,15 @@ def delete_comfyui_output_image(
         return
 
     if file_path.is_file():
-        file_path.unlink()
-        logger.info("%sDeleted ComfyUI output file: %s", prefix, file_path)
+        try:
+            file_path.unlink()
+            logger.info("%sDeleted ComfyUI output file: %s", prefix, file_path)
+        except PermissionError:
+            logger.warning(
+                "%sCould not delete ComfyUI output file (still locked by ComfyUI): %s",
+                prefix,
+                file_path,
+            )
     else:
         logger.warning("%sComfyUI output file not found for delete: %s", prefix, file_path)
 
